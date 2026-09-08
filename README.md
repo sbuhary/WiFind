@@ -49,7 +49,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-3. Windows only: install Npcap from https://npcap.com/ if it is not already installed. During installation, enable "Install Npcap in WinPcap API-compatible Mode" if Scapy has trouble finding the packet capture driver.
+3. Windows only: install Npcap from https://npcap.com/#download if it is not already installed. During installation, enable "Install Npcap in WinPcap API-compatible Mode" if Scapy has trouble finding the packet capture driver.
 
 ## Run the Web UI
 
@@ -136,18 +136,20 @@ Recommended release assets:
 
 Use semantic versions:
 
+- `v1.0.0-beta.1`: first pre-release before the stable installer is promoted.
 - `v1.0.0`: first stable release.
 - `v1.0.1`: bug fix only.
 - `v1.1.0`: backward-compatible feature release.
 - `v2.0.0`: breaking change.
 
-Release flow:
+Automated release flow:
 
 1. Update version references if needed.
-2. Build the installer and portable executable.
-3. Create a Git tag such as `v1.0.0`.
-4. Push the tag.
-5. Create a GitHub Release from that tag and upload files from `dist/`.
+2. Create and push a Git tag such as `v1.0.0-beta.1` or `v1.0.0`.
+3. GitHub Actions builds the Windows executable and installer.
+4. The workflow uploads `WiFind.exe` and `WiFind-Setup.exe` to the matching GitHub Release.
+
+Manual local builds are still useful for testing packaging changes before tagging.
 
 Build a portable executable:
 
@@ -163,7 +165,7 @@ Build a setup installer:
 
 The portable executable is written to `dist\WiFind.exe`. The setup installer is written to `dist\installer\WiFind-Setup.exe` when Inno Setup is installed, or `dist\installer\WiFind-Setup-IExpress.exe` through the built-in Windows fallback.
 
-Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning.
+Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning: https://npcap.com/#download
 
 Example commands for a release:
 
@@ -239,12 +241,12 @@ usage: web_app.py [-h] [--host HOST] [--port PORT] [--quiet]
 
 ```text
 Scanning 192.168.1.0/24 on interface Wi-Fi...
-+---------------+-------------------+---------+----------------+
-| IP Address    | MAC Address       | Vendor  | Hostname       |
-+---------------+-------------------+---------+----------------+
-| 192.168.1.1   | AA:BB:CC:DD:EE:01 | Netgear | router.local   |
-| 192.168.1.24  | AA:BB:CC:DD:EE:02 | Apple   | laptop.local   |
-+---------------+-------------------+---------+----------------+
++---------------+-------------------+---------+------------------------+--------+
+| IP Address    | MAC Address       | Vendor  | Device Name / Hostname | Source |
++---------------+-------------------+---------+------------------------+--------+
+| 192.168.1.1   | AA:BB:CC:DD:EE:01 | Netgear | router.local           | arp    |
+| 192.168.1.24  | AA:BB:CC:DD:EE:02 | Apple   | laptop.local           | arp    |
++---------------+-------------------+---------+------------------------+--------+
 
 Found 2 device(s).
 ```
