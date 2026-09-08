@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="WiFind is a local-first Wi-Fi device inventory scanner using ARP, local cache enrichment, and device history.">
+    <title>WiFind - Local Wi-Fi Device Inventory</title>
+    <link rel="stylesheet" href="assets/site.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="WiFind home">
+        <span class="brand-mark">WF</span>
+        <span>WiFind</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#workflow">Workflow</a>
+        <a href="download.html">Download</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Local-first network visibility</p>
+          <h1>WiFind</h1>
+          <p class="lede">A lightweight desktop scanner for discovering and labeling devices on your Wi-Fi network with ARP, cached neighbor data, hostname enrichment, and local history.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="download.html">Download setup</a>
+            <a class="button secondary" href="#features">Explore features</a>
+          </div>
+        </div>
+
+        <div class="product-preview" aria-label="WiFind dashboard preview">
+          <div class="preview-top">
+            <span class="preview-dot"></span>
+            <span class="preview-dot"></span>
+            <span class="preview-dot"></span>
+            <strong>Smart Scan</strong>
+          </div>
+          <div class="preview-metrics">
+            <div><span>Total</span><strong>18</strong></div>
+            <div><span>Live</span><strong>12</strong></div>
+            <div><span>Private</span><strong>5</strong></div>
+          </div>
+          <div class="preview-device">
+            <span class="device-glyph">GW</span>
+            <div>
+              <strong>Router</strong>
+              <span>192.168.1.1 / zte corporation</span>
+            </div>
+            <em>High</em>
+          </div>
+          <div class="preview-device">
+            <span class="device-glyph">PH</span>
+            <div>
+              <strong>Living Room Phone</strong>
+              <span>Private/randomized MAC</span>
+            </div>
+            <em>Medium</em>
+          </div>
+          <div class="preview-device">
+            <span class="device-glyph">PC</span>
+            <div>
+              <strong>Office Laptop</strong>
+              <span>ARP + cache + hostname</span>
+            </div>
+            <em>High</em>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Built for local diagnostics</p>
+          <h2>Smarter than a ping sweep</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>ARP discovery</h3>
+            <p>Broadcasts ARP requests on the selected subnet and streams each discovered device into the dashboard.</p>
+          </article>
+          <article>
+            <h3>Cache enrichment</h3>
+            <p>Merges live replies with the operating system ARP cache to surface neighbors that missed the live scan window.</p>
+          </article>
+          <article>
+            <h3>Identity hints</h3>
+            <p>Resolves vendors, hostnames, gateway candidates, private MACs, source labels, and confidence scores.</p>
+          </article>
+          <article>
+            <h3>Local inventory</h3>
+            <p>Saves aliases, first seen, last seen, seen count, and last known identity data on the scanning machine.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="workflow" class="section split">
+        <div>
+          <p class="eyebrow">How it works</p>
+          <h2>Press Smart Scan and watch the inventory build</h2>
+        </div>
+        <ol class="steps">
+          <li>Detect the active Wi-Fi adapter and local subnet.</li>
+          <li>Read local neighbor cache entries.</li>
+          <li>Send live ARP probes and append replies immediately.</li>
+          <li>Enrich results with hostnames, vendors, device type, confidence, and history.</li>
+        </ol>
+      </section>
+    </main>
+
+    <footer>
+      <span>WiFind runs locally on your machine.</span>
+      <a href="download.html">Download setup</a>
+    </footer>
+  </body>
+</html>

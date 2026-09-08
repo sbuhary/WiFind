@@ -125,6 +125,40 @@ Interface names vary by operating system. If auto-detection fails, check your OS
 python scanner.py --no-hostnames
 ```
 
+## Install on Other Devices
+
+For Windows users, build either a portable executable or a setup installer.
+
+Portable executable:
+
+```powershell
+.\packaging\windows\build_windows.ps1
+```
+
+Setup installer:
+
+```powershell
+.\packaging\windows\build_windows.ps1 -Installer
+```
+
+The portable executable is written to `dist\WiFind.exe`. The setup installer is written to `dist\installer\WiFind-Setup.exe` when Inno Setup is installed.
+
+Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning.
+
+## GitHub Pages Site
+
+The static product website lives in `docs/` and is ready for GitHub Pages.
+
+To publish it:
+
+1. Push the repository to GitHub.
+2. Open repository settings.
+3. Go to Pages.
+4. Set the source folder to `docs/`.
+5. Upload `WiFind-Setup.exe` or `WiFind.exe` to GitHub Releases.
+
+The download page links to the latest GitHub release when hosted from GitHub Pages.
+
 ## Options
 
 ## Dashboard

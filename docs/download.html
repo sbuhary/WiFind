@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Download WiFind setup or build a portable Windows executable.">
+    <title>Download WiFind</title>
+    <link rel="stylesheet" href="assets/site.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="WiFind home">
+        <span class="brand-mark">WF</span>
+        <span>WiFind</span>
+      </a>
+      <nav>
+        <a href="index.html#features">Features</a>
+        <a href="index.html#workflow">Workflow</a>
+        <a href="download.html">Download</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="download-hero">
+        <p class="eyebrow">Install WiFind</p>
+        <h1>Download the Windows setup</h1>
+        <p class="lede">WiFind needs Administrator privileges and Npcap because it sends ARP packets through the local network adapter.</p>
+        <div class="download-actions">
+          <a id="release-link" class="button primary" href="../releases/latest">Latest GitHub release</a>
+          <a class="button secondary" href="https://npcap.com/">Install Npcap</a>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="feature-grid two">
+          <article>
+            <h2>For users</h2>
+            <ol class="steps compact">
+              <li>Install Npcap.</li>
+              <li>Download `WiFind-Setup.exe` from the latest GitHub release.</li>
+              <li>Run the setup installer.</li>
+              <li>Launch WiFind as Administrator.</li>
+            </ol>
+          </article>
+          <article>
+            <h2>For maintainers</h2>
+            <ol class="steps compact">
+              <li>Run `.\packaging\windows\build_windows.ps1` for a portable executable.</li>
+              <li>Run `.\packaging\windows\build_windows.ps1 -Installer` for an installer.</li>
+              <li>Upload `dist\WiFind.exe` or `dist\installer\WiFind-Setup.exe` to GitHub Releases.</li>
+              <li>Update the release link on this page after setting the repository URL.</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+
+      <section class="section callout">
+        <h2>GitHub Pages setup</h2>
+        <p>Serve this folder from GitHub Pages by selecting `docs/` as the Pages source in the repository settings.</p>
+      </section>
+    </main>
+
+    <footer>
+      <span>WiFind setup requires Npcap on Windows.</span>
+      <a href="index.html">Back to product page</a>
+    </footer>
+    <script src="assets/site.js"></script>
+  </body>
+</html>
