@@ -6,10 +6,10 @@ project_root = Path.cwd()
 
 
 a = Analysis(
-    ["wifind_launcher.py"],
+    [str(project_root / "wifind_launcher.py")],
     pathex=[str(project_root)],
     binaries=[],
-    datas=[("static", "static")],
+    datas=[(str(project_root / "static"), "static")],
     hiddenimports=["scapy.layers.l2", "scapy.arch.windows"],
     hookspath=[],
     hooksconfig={},

@@ -10,19 +10,27 @@ if (-not (Test-Path ".venv")) {
     python -m venv .venv
 }
 
-& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
-& ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt -r requirements-build.txt
+& ".\.venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt -r requirements-build.txt
 & ".\.venv\Scripts\pyinstaller.exe" --clean --noconfirm "packaging\windows\WiFind.spec"
+if ($LASTEXITCODE -ne 0) {
+    throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Portable executable created at: $ProjectRoot\dist\WiFind.exe"
 
 if ($Installer) {
     $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
-    if (-not $iscc) {
-        Write-Host "Inno Setup was not found. Install it from https://jrsoftware.org/isinfo.php to build the setup installer."
-        exit 0
+    if ($iscc) {
+        & $iscc.Source "packaging\windows\WiFind.iss"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE"
+        }
+        Write-Host "Installer created in: $ProjectRoot\dist\installer"
+    } else {
+        Write-Host "Inno Setup was not found. Falling back to Windows IExpress."
+        & powershell -ExecutionPolicy Bypass -File "packaging\windows\build_iexpress_installer.ps1" -ProjectRoot $ProjectRoot
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+            throw "IExpress fallback failed with exit code $LASTEXITCODE"
+        }
     }
-
-    & $iscc.Source "packaging\windows\WiFind.iss"
-    Write-Host "Installer created in: $ProjectRoot\dist\installer"
 }

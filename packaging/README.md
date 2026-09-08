@@ -7,7 +7,8 @@ WiFind can be distributed to other Windows devices as either a portable administ
 - Python 3.10 or newer
 - Npcap installed on the target machine: https://npcap.com/
 - PowerShell
-- Inno Setup, only if you want a `.exe` setup installer: https://jrsoftware.org/isinfo.php
+- Inno Setup if you want the preferred setup installer: https://jrsoftware.org/isinfo.php
+- IExpress fallback is available on most Windows installations when Inno Setup is not installed.
 
 ## Build a Portable EXE
 
@@ -27,16 +28,22 @@ Run it as Administrator. It starts the local WiFind server and opens the dashboa
 
 ## Build a Setup Installer
 
-Install Inno Setup, then run:
+Run:
 
 ```powershell
 .\packaging\windows\build_windows.ps1 -Installer
 ```
 
-The installer will be created in:
+If Inno Setup is installed, the installer will be created in:
 
 ```text
 dist\installer\
+```
+
+If Inno Setup is not installed, the build falls back to IExpress and creates:
+
+```text
+dist\installer\WiFind-Setup-IExpress.exe
 ```
 
 ## Distribution Notes
