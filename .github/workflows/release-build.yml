@@ -1,0 +1,80 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows executable and setup
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows artifacts
+        shell: pwsh
+        run: .\packaging\windows\build_windows.ps1 -Installer
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiFind-Windows
+          path: |
+            dist/WiFind.exe
+            dist/installer/WiFind-Setup.exe
+            dist/installer/WiFind-Setup-IExpress.exe
+          if-no-files-found: error
+
+      - name: Upload release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) {
+            $releaseArgs = @(
+              "release",
+              "create",
+              $env:GITHUB_REF_NAME,
+              "--repo",
+              $env:GITHUB_REPOSITORY,
+              "--title",
+              "WiFind $env:GITHUB_REF_NAME",
+              "--notes",
+              "Windows release artifacts for WiFind."
+            )
+            if ($env:GITHUB_REF_NAME -match "-") {
+              $releaseArgs += "--prerelease"
+            }
+            gh @releaseArgs
+          }
+
+          $assets = @("dist\WiFind.exe")
+          if (Test-Path "dist\installer\WiFind-Setup.exe") {
+            $assets += "dist\installer\WiFind-Setup.exe"
+          }
+          if (Test-Path "dist\installer\WiFind-Setup-IExpress.exe") {
+            $assets += "dist\installer\WiFind-Setup-IExpress.exe"
+          }
+
+          gh release upload $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --clobber

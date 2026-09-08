@@ -16,6 +16,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -35,6 +36,17 @@ else:
 
 DEFAULT_TIMEOUT_SECONDS = 2.0
 DEFAULT_RETRIES = 1
+UNKNOWN_HOSTNAMES = {"", "Unknown", "Unknown Device", "Skipped"}
+LOCAL_OUI_OVERRIDES = {
+    "001A11": "Google",
+    "3C5AB4": "Google",
+    "54E43A": "Apple",
+    "60F189": "Murata / Apple",
+    "A4B197": "Apple",
+    "B827EB": "Raspberry Pi",
+    "D06578": "Intel Corporate",
+    "F4F5D8": "Google",
+}
 
 
 @dataclass(frozen=True)
@@ -409,6 +421,10 @@ def vendor_for_mac(mac: str) -> str:
     if is_locally_administered_mac(mac):
         return "Private/randomized MAC"
 
+    oui = re.sub(r"[^0-9A-Fa-f]", "", mac).upper()[:6]
+    if oui in LOCAL_OUI_OVERRIDES:
+        return LOCAL_OUI_OVERRIDES[oui]
+
     manufdb = getattr(conf, "manufdb", None)
     if manufdb is None:
         return "Unknown"
@@ -433,17 +449,224 @@ def vendor_for_mac(mac: str) -> str:
 
 
 def hostname_for_ip(ip_address: str) -> str:
+    for resolver in (
+        netbios_udp_hostname_for_ip,
+        mdns_hostname_for_ip,
+        reverse_dns_hostname_for_ip,
+        command_hostname_for_ip,
+        netbios_hostname_for_ip,
+    ):
+        hostname = resolver(ip_address)
+        if hostname:
+            return hostname
+    return "Unknown Device"
+
+
+def reverse_dns_hostname_for_ip(ip_address: str) -> str | None:
     try:
         hostname, _aliases, _addresses = socket.gethostbyaddr(ip_address)
     except (socket.herror, socket.gaierror, TimeoutError, OSError):
-        hostname = ""
+        return None
+    return normalize_hostname(hostname, ip_address)
 
-    clean_hostname = hostname.rstrip(".")
-    if clean_hostname and clean_hostname != ip_address:
-        return clean_hostname
 
-    netbios_name = netbios_hostname_for_ip(ip_address)
-    return netbios_name or "Unknown"
+def normalize_hostname(hostname: str, ip_address: str) -> str | None:
+    cleaned = hostname.strip().rstrip(".")
+    if not cleaned or cleaned == ip_address:
+        return None
+    return cleaned
+
+
+def command_hostname_for_ip(ip_address: str) -> str | None:
+    return nslookup_hostname_for_ip(ip_address) or ping_hostname_for_ip(ip_address)
+
+
+def netbios_udp_hostname_for_ip(ip_address: str) -> str | None:
+    query = build_netbios_node_status_query()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(0.8)
+            sock.sendto(query, (ip_address, 137))
+            payload, _address = sock.recvfrom(1024)
+    except (OSError, TimeoutError):
+        return None
+    return parse_netbios_node_status(payload, ip_address)
+
+
+def build_netbios_node_status_query() -> bytes:
+    transaction_id = os.urandom(2)
+    header = transaction_id + b"\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+    encoded_name = encode_netbios_name("*")
+    return header + bytes([len(encoded_name)]) + encoded_name + b"\x00\x00\x21\x00\x01"
+
+
+def encode_netbios_name(name: str) -> bytes:
+    padded = name[:15].upper().ljust(15) + "\x00"
+    encoded = bytearray()
+    for character in padded.encode("ascii", errors="replace"):
+        encoded.append(0x41 + ((character >> 4) & 0x0F))
+        encoded.append(0x41 + (character & 0x0F))
+    return bytes(encoded)
+
+
+def parse_netbios_node_status(payload: bytes, ip_address: str) -> str | None:
+    try:
+        offset = 12
+        while payload[offset] != 0:
+            offset += payload[offset] + 1
+        offset += 5
+        if payload[offset] & 0xC0 == 0xC0:
+            offset += 2
+        else:
+            while payload[offset] != 0:
+                offset += payload[offset] + 1
+            offset += 1
+        response_type = int.from_bytes(payload[offset : offset + 2], "big")
+        offset += 10
+        data_length = int.from_bytes(payload[offset : offset + 2], "big")
+        offset += 2
+        if response_type != 0x0021 or data_length <= 1:
+            return None
+        name_count = payload[offset]
+        offset += 1
+    except (IndexError, ValueError):
+        return None
+
+    candidates: list[str] = []
+    for _index in range(name_count):
+        try:
+            raw_name = payload[offset : offset + 15].decode("ascii", errors="ignore").strip()
+            suffix = payload[offset + 15]
+            flags = int.from_bytes(payload[offset + 16 : offset + 18], "big")
+        except (IndexError, ValueError):
+            break
+        offset += 18
+        is_group = bool(flags & 0x8000)
+        if suffix == 0x00 and raw_name and not is_group and raw_name.upper() != "WORKGROUP":
+            candidates.append(raw_name)
+
+    for candidate in candidates:
+        normalized = normalize_hostname(candidate, ip_address)
+        if normalized:
+            return normalized
+    return None
+
+
+def mdns_hostname_for_ip(ip_address: str) -> str | None:
+    query = build_mdns_query("_services._dns-sd._udp.local")
+    names: list[str] = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.settimeout(0.25)
+            sock.sendto(query, ("224.0.0.251", 5353))
+            deadline = time.monotonic() + 0.8
+            while time.monotonic() < deadline:
+                try:
+                    payload, address = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                if address[0] != ip_address:
+                    continue
+                names.extend(parse_mdns_names(payload))
+    except OSError:
+        return None
+
+    for name in names:
+        normalized = normalize_hostname(name, ip_address)
+        if normalized:
+            return normalized
+    return None
+
+
+def build_mdns_query(name: str) -> bytes:
+    encoded = bytearray()
+    for label in name.split("."):
+        encoded.append(len(label))
+        encoded.extend(label.encode("utf-8"))
+    encoded.append(0)
+    return b"\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00" + bytes(encoded) + b"\x00\x0c\x80\x01"
+
+
+def parse_mdns_names(payload: bytes) -> list[str]:
+    names: list[str] = []
+    for index in range(len(payload)):
+        parsed = read_dns_name(payload, index)
+        if parsed and parsed.endswith(".local") and not parsed.startswith("_"):
+            names.append(parsed.removesuffix(".local"))
+    return sorted(set(names), key=len)
+
+
+def read_dns_name(payload: bytes, offset: int) -> str | None:
+    labels: list[str] = []
+    visited: set[int] = set()
+    try:
+        while True:
+            if offset in visited:
+                return None
+            visited.add(offset)
+            length = payload[offset]
+            if length == 0:
+                break
+            if length & 0xC0 == 0xC0:
+                pointer = ((length & 0x3F) << 8) | payload[offset + 1]
+                offset = pointer
+                continue
+            if length > 63:
+                return None
+            offset += 1
+            label = payload[offset : offset + length].decode("utf-8", errors="ignore")
+            if not label:
+                return None
+            labels.append(label)
+            offset += length
+    except IndexError:
+        return None
+    return ".".join(labels) if labels else None
+
+
+def nslookup_hostname_for_ip(ip_address: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["nslookup", ip_address],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    for line in result.stdout.splitlines():
+        match = re.match(r"\s*Name:\s+(.+?)\s*$", line, flags=re.IGNORECASE)
+        if match:
+            return normalize_hostname(match.group(1), ip_address)
+    return None
+
+
+def ping_hostname_for_ip(ip_address: str) -> str | None:
+    if os.name != "nt":
+        return None
+
+    try:
+        result = subprocess.run(
+            ["ping", "-a", "-n", "1", "-w", "500", ip_address],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    for line in result.stdout.splitlines():
+        match = re.match(r"\s*Pinging\s+([^\s\[]+)\s+\[" + re.escape(ip_address) + r"\]", line, flags=re.IGNORECASE)
+        if match:
+            return normalize_hostname(match.group(1), ip_address)
+    return None
 
 
 def netbios_hostname_for_ip(ip_address: str) -> str | None:
@@ -599,7 +822,7 @@ def merge_devices(device_groups: Iterable[Iterable[Device]]) -> list[Device]:
 
             preferred = device if source_rank.get(device.source, 9) < source_rank.get(existing.source, 9) else existing
             hostname = preferred.hostname
-            if hostname in ("Unknown", "Skipped") and device.hostname not in ("Unknown", "Skipped"):
+            if hostname in UNKNOWN_HOSTNAMES and device.hostname not in UNKNOWN_HOSTNAMES:
                 hostname = device.hostname
 
             vendor = preferred.vendor
@@ -648,7 +871,7 @@ def smart_scan(
 
 def print_table(devices: Iterable[Device]) -> None:
     rows = [(device.ip, device.mac, device.vendor, device.hostname, device.source) for device in devices]
-    headers = ("IP Address", "MAC Address", "Vendor", "Hostname", "Source")
+    headers = ("IP Address", "MAC Address", "Vendor", "Device Name / Hostname", "Source")
     widths = [len(header) for header in headers]
 
     for row in rows:

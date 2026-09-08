@@ -193,9 +193,20 @@ h2 {
   opacity: 0.55;
 }
 
+.icon-button {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: #ffffff;
+}
+
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 12px;
   margin-top: 16px;
 }
@@ -221,6 +232,8 @@ h2 {
 .metric-card.private strong { color: var(--amber); }
 .metric-card.unknown strong { color: var(--red); }
 .metric-card.gateway strong { color: var(--primary-2); }
+.metric-card.new-scan strong { color: var(--blue); }
+.metric-card.missing strong { color: var(--amber); }
 
 .workspace {
   display: grid;
@@ -477,11 +490,16 @@ select:focus {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #ffffff;
+  cursor: pointer;
 }
 
 .device-card.new {
   border-color: rgba(37, 99, 235, 0.38);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.device-card.new-scan {
+  border-color: rgba(183, 121, 31, 0.38);
 }
 
 .device-card-header {
@@ -599,6 +617,7 @@ td {
 
 tbody tr:hover {
   background: #f7fbfa;
+  cursor: pointer;
 }
 
 .mono {
@@ -616,9 +635,67 @@ tbody tr:hover {
   display: none;
 }
 
+.detail-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.detail-drawer.hidden {
+  display: none;
+}
+
+.detail-panel {
+  width: min(430px, 100vw);
+  min-height: 100%;
+  padding: 22px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: -18px 0 48px rgba(15, 23, 42, 0.18);
+}
+
+.detail-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-grid {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.detail-grid div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.detail-grid dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.detail-grid dd {
+  overflow-wrap: anywhere;
+  margin: 5px 0 0;
+  font-weight: 750;
+}
+
 @media (max-width: 1060px) {
   .summary-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .workspace {

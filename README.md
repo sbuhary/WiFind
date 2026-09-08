@@ -49,7 +49,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-3. Windows only: install Npcap from https://npcap.com/ if it is not already installed. During installation, enable "Install Npcap in WinPcap API-compatible Mode" if Scapy has trouble finding the packet capture driver.
+3. Windows only: install Npcap from https://npcap.com/#download if it is not already installed. During installation, enable "Install Npcap in WinPcap API-compatible Mode" if Scapy has trouble finding the packet capture driver.
 
 ## Run the Web UI
 
@@ -136,18 +136,20 @@ Recommended release assets:
 
 Use semantic versions:
 
+- `v1.0.0-beta.1`: first pre-release before the stable installer is promoted.
 - `v1.0.0`: first stable release.
 - `v1.0.1`: bug fix only.
 - `v1.1.0`: backward-compatible feature release.
 - `v2.0.0`: breaking change.
 
-Release flow:
+Automated release flow:
 
 1. Update version references if needed.
-2. Build the installer and portable executable.
-3. Create a Git tag such as `v1.0.0`.
-4. Push the tag.
-5. Create a GitHub Release from that tag and upload files from `dist/`.
+2. Create and push a Git tag such as `v1.0.0-beta.1` or `v1.0.0`.
+3. GitHub Actions builds the Windows executable and installer.
+4. The workflow uploads `WiFind.exe` and `WiFind-Setup.exe` to the matching GitHub Release.
+
+Manual local builds are still useful for testing packaging changes before tagging.
 
 Build a portable executable:
 
@@ -163,7 +165,7 @@ Build a setup installer:
 
 The portable executable is written to `dist\WiFind.exe`. The setup installer is written to `dist\installer\WiFind-Setup.exe` when Inno Setup is installed, or `dist\installer\WiFind-Setup-IExpress.exe` through the built-in Windows fallback.
 
-Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning.
+Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning: https://npcap.com/#download
 
 Example commands for a release:
 
@@ -183,11 +185,17 @@ The static product website lives in `docs/`. It includes a product landing page 
 - `Smart Scan`: Runs adapter detection, local ARP-cache import, live ARP probing, hostname enrichment, and device classification.
 - Summary metrics: Shows total devices, live ARP devices, cached-only devices, private MACs, unknown hostnames, and gateway candidates.
 - Phase timeline: Shows the current scan stage while results stream in.
+- Progress facts: Shows elapsed scan time and cache/live device counters.
+- Cancel: Stops the current dashboard scan session.
 - Device cards: Shows alias, hostname/IP/MAC, vendor, guessed type, confidence, source, notes, and seen count.
+- Device details: Click a card or table row to inspect the full identity/debug record.
 - Table view: Dense inventory view for sorting and exporting.
 - Filter chips: Quickly narrow results to live, cached, unknown, private MAC, gateway, this device, or new devices.
 - Aliases: Type a label into a device card and it is saved locally for future scans.
 - History: WiFind stores first seen, last seen, seen count, aliases, and last known identity data locally.
+- Previous scan comparison: Highlights new devices and counts devices missing since the last completed scan.
+- Auto rescan: Optionally reruns Smart Scan on a fixed local interval.
+- Notifications: Optional browser notifications can alert when a device appears that was not in the previous scan.
 
 ## UI Fields
 
@@ -196,6 +204,9 @@ The static product website lives in `docs/`. It includes a product landing page 
 - `Timeout`: How long the scanner waits for ARP replies. Increase this to `4` or `5` seconds on slower Wi-Fi.
 - `Retries`: How many extra ARP attempts are sent. Increase this to `2` or `3` if some devices respond inconsistently.
 - `Resolve hostnames`: Performs reverse DNS lookups. This can help identify devices, but may slow scans or return `Unknown`.
+- `Notify on new devices`: Requests browser notification permission and alerts when a newly observed device appears.
+- `Auto rescan`: Repeats Smart Scan using the current settings.
+- `Rescan interval`: Controls how often auto rescan runs.
 - `Filter results`: Filters the visible result table after a scan.
 - `Sort`: Sorts devices by IP, confidence, type, vendor, or last seen.
 - `Cards/Table`: Switches between inventory card view and dense table view.
@@ -230,12 +241,12 @@ usage: web_app.py [-h] [--host HOST] [--port PORT] [--quiet]
 
 ```text
 Scanning 192.168.1.0/24 on interface Wi-Fi...
-+---------------+-------------------+---------+----------------+
-| IP Address    | MAC Address       | Vendor  | Hostname       |
-+---------------+-------------------+---------+----------------+
-| 192.168.1.1   | AA:BB:CC:DD:EE:01 | Netgear | router.local   |
-| 192.168.1.24  | AA:BB:CC:DD:EE:02 | Apple   | laptop.local   |
-+---------------+-------------------+---------+----------------+
++---------------+-------------------+---------+------------------------+--------+
+| IP Address    | MAC Address       | Vendor  | Device Name / Hostname | Source |
++---------------+-------------------+---------+------------------------+--------+
+| 192.168.1.1   | AA:BB:CC:DD:EE:01 | Netgear | router.local           | arp    |
+| 192.168.1.24  | AA:BB:CC:DD:EE:02 | Apple   | laptop.local           | arp    |
++---------------+-------------------+---------+------------------------+--------+
 
 Found 2 device(s).
 ```

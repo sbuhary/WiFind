@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Download WiFind setup for Windows.">
+    <meta name="description" content="Download WiFind for Windows and install Npcap.">
     <title>Download WiFind</title>
     <link rel="stylesheet" href="assets/site.css">
   </head>
@@ -16,43 +16,53 @@
       <nav>
         <a href="index.html#features">Features</a>
         <a href="index.html#workflow">Workflow</a>
-        <a href="download.html">Download</a>
+        <a class="nav-cta" href="download.html">Download</a>
       </nav>
     </header>
 
     <main>
-      <section class="download-hero">
-        <p class="eyebrow">Install WiFind</p>
-        <h1>Download the Windows setup</h1>
-        <p class="lede">WiFind needs Administrator privileges and Npcap because it sends ARP packets through the local network adapter.</p>
-        <div class="download-actions">
-          <a id="release-link" class="button primary" href="../releases/latest">Latest GitHub release</a>
-          <a class="button secondary" href="https://npcap.com/">Install Npcap</a>
+      <section class="download-panel">
+        <div class="download-copy">
+          <p class="eyebrow">Windows setup</p>
+          <h1>Download WiFind</h1>
+          <p class="lede">Install Npcap first, then run the WiFind setup as Administrator. WiFind opens a local dashboard and scans your Wi-Fi/LAN with ARP.</p>
+          <div class="download-actions">
+            <a id="release-link" class="button primary" href="../releases">WiFind releases</a>
+            <a class="button secondary" href="https://npcap.com/#download">Download Npcap</a>
+          </div>
         </div>
+
+        <aside class="download-card">
+          <h2>Install checklist</h2>
+          <ol class="steps">
+            <li>Install Npcap from the official site.</li>
+            <li>Download <code>WiFind-Setup.exe</code>.</li>
+            <li>Run WiFind as Administrator.</li>
+          </ol>
+        </aside>
       </section>
 
-      <section class="section">
-        <div class="feature-grid">
-          <article>
-            <h2>Install steps</h2>
-            <ol class="steps compact">
-              <li>Install Npcap.</li>
-              <li>Download `WiFind-Setup.exe` from the latest GitHub release.</li>
-              <li>Run the setup installer.</li>
-              <li>Launch WiFind as Administrator.</li>
-            </ol>
-          </article>
-        </div>
-      </section>
-
-      <section class="section callout">
-        <h2>Release downloads</h2>
-        <p>Install Npcap first, then download the latest WiFind setup from the release page. WiFind stores aliases and scan history locally on your machine.</p>
+      <section class="download-grid">
+        <article>
+          <span>01</span>
+          <h2>Npcap required</h2>
+          <p>Windows needs Npcap so WiFind can send ARP packets through your active network adapter.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h2>Local dashboard</h2>
+          <p>The app runs on your machine and opens a browser UI at localhost.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h2>Private inventory</h2>
+          <p>Aliases, scan history, and snapshots stay in local app storage.</p>
+        </article>
       </section>
     </main>
 
     <footer>
-      <span>WiFind setup requires Npcap on Windows.</span>
+      <span>WiFind runs locally on Windows.</span>
       <a href="index.html">Back to product page</a>
     </footer>
     <script src="assets/site.js"></script>
