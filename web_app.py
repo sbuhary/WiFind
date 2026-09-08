@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -41,8 +42,10 @@ from scanner import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-STATIC_ROOT = PROJECT_ROOT / "static"
-STATE_DIR = PROJECT_ROOT / ".wifind"
+BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
+STATIC_ROOT = BUNDLE_ROOT / "static"
+DEFAULT_STATE_ROOT = Path(os.environ.get("LOCALAPPDATA", PROJECT_ROOT)) / "WiFind" if sys.platform == "win32" else PROJECT_ROOT / ".wifind"
+STATE_DIR = Path(os.environ.get("WIFIND_STATE_DIR", str(DEFAULT_STATE_ROOT)))
 HISTORY_PATH = STATE_DIR / "device_history.json"
 
 
