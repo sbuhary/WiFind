@@ -183,11 +183,17 @@ The static product website lives in `docs/`. It includes a product landing page 
 - `Smart Scan`: Runs adapter detection, local ARP-cache import, live ARP probing, hostname enrichment, and device classification.
 - Summary metrics: Shows total devices, live ARP devices, cached-only devices, private MACs, unknown hostnames, and gateway candidates.
 - Phase timeline: Shows the current scan stage while results stream in.
+- Progress facts: Shows elapsed scan time and cache/live device counters.
+- Cancel: Stops the current dashboard scan session.
 - Device cards: Shows alias, hostname/IP/MAC, vendor, guessed type, confidence, source, notes, and seen count.
+- Device details: Click a card or table row to inspect the full identity/debug record.
 - Table view: Dense inventory view for sorting and exporting.
 - Filter chips: Quickly narrow results to live, cached, unknown, private MAC, gateway, this device, or new devices.
 - Aliases: Type a label into a device card and it is saved locally for future scans.
 - History: WiFind stores first seen, last seen, seen count, aliases, and last known identity data locally.
+- Previous scan comparison: Highlights new devices and counts devices missing since the last completed scan.
+- Auto rescan: Optionally reruns Smart Scan on a fixed local interval.
+- Notifications: Optional browser notifications can alert when a device appears that was not in the previous scan.
 
 ## UI Fields
 
@@ -196,6 +202,9 @@ The static product website lives in `docs/`. It includes a product landing page 
 - `Timeout`: How long the scanner waits for ARP replies. Increase this to `4` or `5` seconds on slower Wi-Fi.
 - `Retries`: How many extra ARP attempts are sent. Increase this to `2` or `3` if some devices respond inconsistently.
 - `Resolve hostnames`: Performs reverse DNS lookups. This can help identify devices, but may slow scans or return `Unknown`.
+- `Notify on new devices`: Requests browser notification permission and alerts when a newly observed device appears.
+- `Auto rescan`: Repeats Smart Scan using the current settings.
+- `Rescan interval`: Controls how often auto rescan runs.
 - `Filter results`: Filters the visible result table after a scan.
 - `Sort`: Sorts devices by IP, confidence, type, vendor, or last seen.
 - `Cards/Table`: Switches between inventory card view and dense table view.

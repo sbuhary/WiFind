@@ -12,3 +12,13 @@
 - [x] Add user aliases for devices.
 - [x] Add network health summary metrics.
 - [x] Redesign the UI theme and components for a production dashboard feel.
+- [x] Add scan cancellation from the dashboard.
+- [x] Add elapsed time and cache/live progress counters.
+- [x] Add a device details drawer.
+- [x] Compare each scan with the previous scan.
+- [x] Highlight new and missing devices since the previous scan.
+- [x] Warn when the same private MAC appears on multiple IP addresses.
+- [x] Add optional periodic rescans.
+- [x] Add optional browser notifications for newly discovered devices.
+- [x] Add additional hostname fallbacks beyond reverse DNS.
+- [x] Add GitHub Actions release artifact builds.

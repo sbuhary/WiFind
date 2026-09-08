@@ -32,6 +32,12 @@
             </svg>
             <span>Smart Scan</span>
           </button>
+          <button id="cancel-button" class="secondary-button hidden" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+            <span>Cancel</span>
+          </button>
         </div>
       </header>
 
@@ -59,6 +65,14 @@
         <article class="metric-card gateway">
           <span>Gateways</span>
           <strong id="metric-gateways">0</strong>
+        </article>
+        <article class="metric-card new-scan">
+          <span>New Since Last</span>
+          <strong id="metric-new-scan">0</strong>
+        </article>
+        <article class="metric-card missing">
+          <span>Missing Since Last</span>
+          <strong id="metric-missing">0</strong>
         </article>
       </section>
 
@@ -108,6 +122,25 @@
                 <input id="resolve-hostnames" name="resolveHostnames" type="checkbox" checked>
                 <span>Resolve hostnames</span>
               </label>
+
+              <label class="toggle-row">
+                <input id="notify-new" name="notifyNew" type="checkbox">
+                <span>Notify on new devices</span>
+              </label>
+
+              <label class="toggle-row">
+                <input id="auto-rescan" name="autoRescan" type="checkbox">
+                <span>Auto rescan</span>
+              </label>
+
+              <label>
+                <span>Rescan interval</span>
+                <select id="rescan-interval" name="rescanInterval">
+                  <option value="60">Every 1 minute</option>
+                  <option value="300" selected>Every 5 minutes</option>
+                  <option value="900">Every 15 minutes</option>
+                </select>
+              </label>
             </form>
           </details>
 
@@ -119,6 +152,14 @@
             <div>
               <span>Privileges</span>
               <strong id="privilege-state">Checking</strong>
+            </div>
+            <div>
+              <span>Elapsed</span>
+              <strong id="progress-elapsed">0s</strong>
+            </div>
+            <div>
+              <span>Cache / Live</span>
+              <strong id="progress-counts">0 / 0</strong>
             </div>
           </div>
         </aside>
@@ -189,6 +230,24 @@
           </div>
         </section>
       </section>
+
+      <aside id="detail-drawer" class="detail-drawer hidden" aria-labelledby="detail-title" aria-hidden="true">
+        <div class="detail-panel">
+          <div class="detail-header">
+            <div>
+              <p class="eyebrow">Device details</p>
+              <h2 id="detail-title">Device</h2>
+            </div>
+            <button id="detail-close" class="icon-button" type="button" aria-label="Close device details">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <dl id="detail-content" class="detail-grid"></dl>
+          <div id="detail-notes" class="notes"></div>
+        </div>
+      </aside>
     </main>
 
     <script src="/app.js" defer></script>
