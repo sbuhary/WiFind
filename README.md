@@ -125,25 +125,52 @@ Interface names vary by operating system. If auto-detection fails, check your OS
 python scanner.py --no-hostnames
 ```
 
-## Install on Other Devices
+## Releases
 
-For Windows users, build either a portable executable or a setup installer.
+Put downloadable executables in **GitHub Releases**, not in the repository. `dist/` stays ignored so large build artifacts and machine-specific output do not pollute source control.
 
-Portable executable:
+Recommended release assets:
+
+- `WiFind-Setup.exe`: preferred user-facing installer.
+- `WiFind.exe`: optional portable executable.
+
+Use semantic versions:
+
+- `v1.0.0`: first stable release.
+- `v1.0.1`: bug fix only.
+- `v1.1.0`: backward-compatible feature release.
+- `v2.0.0`: breaking change.
+
+Release flow:
+
+1. Update version references if needed.
+2. Build the installer and portable executable.
+3. Create a Git tag such as `v1.0.0`.
+4. Push the tag.
+5. Create a GitHub Release from that tag and upload files from `dist/`.
+
+Build a portable executable:
 
 ```powershell
 .\packaging\windows\build_windows.ps1
 ```
 
-Setup installer:
+Build a setup installer:
 
 ```powershell
 .\packaging\windows\build_windows.ps1 -Installer
 ```
 
-The portable executable is written to `dist\WiFind.exe`. The setup installer is written to `dist\installer\WiFind-Setup.exe` when Inno Setup is installed.
+The portable executable is written to `dist\WiFind.exe`. The setup installer is written to `dist\installer\WiFind-Setup.exe` when Inno Setup is installed, or `dist\installer\WiFind-Setup-IExpress.exe` through the built-in Windows fallback.
 
 Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning.
+
+Example commands for a release:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## Product Website
 
