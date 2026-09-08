@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WiFind</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 19.5h.01M4.93 10.93a10 10 0 0 1 14.14 0M8.46 14.46a5 5 0 0 1 7.08 0M2 7a14 14 0 0 1 20 0" />
+            </svg>
+          </div>
+          <div>
+            <p class="eyebrow">Local network inventory</p>
+            <h1>WiFind</h1>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="adapter-pill">
+            <span>Adapter</span>
+            <strong id="active-interface">Detecting</strong>
+          </div>
+          <button id="scan-button" class="primary-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+            </svg>
+            <span>Smart Scan</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="Network health summary">
+        <article class="metric-card">
+          <span>Total Devices</span>
+          <strong id="metric-total">0</strong>
+        </article>
+        <article class="metric-card live">
+          <span>Live ARP</span>
+          <strong id="metric-live">0</strong>
+        </article>
+        <article class="metric-card cache">
+          <span>Cached Only</span>
+          <strong id="metric-cached">0</strong>
+        </article>
+        <article class="metric-card private">
+          <span>Private MACs</span>
+          <strong id="metric-private">0</strong>
+        </article>
+        <article class="metric-card unknown">
+          <span>Unknown Names</span>
+          <strong id="metric-unknown">0</strong>
+        </article>
+        <article class="metric-card gateway">
+          <span>Gateways</span>
+          <strong id="metric-gateways">0</strong>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <aside class="control-panel" aria-label="Scan controls">
+          <div class="panel-header">
+            <p class="eyebrow">Scan profile</p>
+            <h2>Smart Discovery</h2>
+          </div>
+
+          <div id="status" class="status" role="status" aria-live="polite">Loading network context...</div>
+
+          <ol class="phase-list" aria-label="Scan progress">
+            <li data-phase="context" class="phase active">Detect adapter</li>
+            <li data-phase="cache" class="phase">Read neighbor cache</li>
+            <li data-phase="arp" class="phase">Probe with ARP</li>
+            <li data-phase="enrich" class="phase">Enrich inventory</li>
+            <li data-phase="done" class="phase">Complete</li>
+          </ol>
+
+          <details class="advanced-panel">
+            <summary>Advanced settings</summary>
+            <form id="scan-form" class="control-grid">
+              <label>
+                <span>Target subnet</span>
+                <input id="target" name="target" type="text" inputmode="text" placeholder="Auto">
+              </label>
+
+              <label>
+                <span>Interface</span>
+                <input id="interface" name="interface" type="text" placeholder="Auto" list="interfaces">
+                <datalist id="interfaces"></datalist>
+              </label>
+
+              <div class="number-row">
+                <label>
+                  <span>Timeout</span>
+                  <input id="timeout" name="timeout" type="number" min="0.5" max="10" step="0.5" value="2">
+                </label>
+                <label>
+                  <span>Retries</span>
+                  <input id="retries" name="retries" type="number" min="0" max="5" step="1" value="1">
+                </label>
+              </div>
+
+              <label class="toggle-row">
+                <input id="resolve-hostnames" name="resolveHostnames" type="checkbox" checked>
+                <span>Resolve hostnames</span>
+              </label>
+            </form>
+          </details>
+
+          <div class="facts">
+            <div>
+              <span>Subnet</span>
+              <strong id="active-target">Pending</strong>
+            </div>
+            <div>
+              <span>Privileges</span>
+              <strong id="privilege-state">Checking</strong>
+            </div>
+          </div>
+        </aside>
+
+        <section class="inventory-panel" aria-labelledby="inventory-title">
+          <div class="inventory-toolbar">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h2 id="inventory-title">Connected Devices</h2>
+            </div>
+            <div class="toolbar-controls">
+              <input id="filter" class="filter-input" type="search" placeholder="Filter devices" aria-label="Filter devices">
+              <select id="sort" aria-label="Sort devices">
+                <option value="ip">Sort by IP</option>
+                <option value="confidence">Sort by confidence</option>
+                <option value="type">Sort by type</option>
+                <option value="vendor">Sort by vendor</option>
+                <option value="lastSeen">Sort by last seen</option>
+              </select>
+              <div class="view-toggle" role="group" aria-label="View mode">
+                <button id="cards-view" class="segmented active" type="button">Cards</button>
+                <button id="table-view" class="segmented" type="button">Table</button>
+              </div>
+              <button id="export-button" class="secondary-button" type="button" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="filter-chips" aria-label="Quick filters">
+            <button class="chip active" data-filter="all" type="button">All</button>
+            <button class="chip" data-filter="live" type="button">Live</button>
+            <button class="chip" data-filter="cached" type="button">Cached</button>
+            <button class="chip" data-filter="unknown" type="button">Unknown</button>
+            <button class="chip" data-filter="private" type="button">Private MAC</button>
+            <button class="chip" data-filter="gateway" type="button">Gateway</button>
+            <button class="chip" data-filter="local" type="button">This device</button>
+            <button class="chip" data-filter="new" type="button">New</button>
+          </div>
+
+          <div id="cards-container" class="device-grid">
+            <div class="empty-state">Start a smart scan to build the local inventory.</div>
+          </div>
+
+          <div id="table-container" class="table-wrap hidden">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Device</th>
+                  <th scope="col">IP</th>
+                  <th scope="col">MAC</th>
+                  <th scope="col">Vendor</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Confidence</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Seen</th>
+                </tr>
+              </thead>
+              <tbody id="results-body">
+                <tr class="empty-row">
+                  <td colspan="8">Start a scan to populate this table.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
