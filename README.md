@@ -14,7 +14,7 @@ ARP scanning only works on your local broadcast network. Use this tool only on n
 - Labels locally administered MAC addresses as private/randomized when a real vendor cannot be inferred.
 - Optionally performs reverse DNS and Windows NetBIOS lookups for hostnames.
 - Streams scan progress to the UI and appends devices as they are discovered.
-- Persists local device history and user aliases in `.wifind/device_history.json`.
+- Persists local device history and user aliases under `%LOCALAPPDATA%\WiFind` on Windows or `.wifind/` during local development.
 - Adds confidence, device type guesses, source labels, and network health metrics.
 - Provides card and table inventory views with filters, sorting, and CSV export.
 - Prints results in a clean console table.
@@ -145,19 +145,9 @@ The portable executable is written to `dist\WiFind.exe`. The setup installer is 
 
 Target devices still need Npcap installed because WiFind depends on a packet capture driver for ARP scanning.
 
-## GitHub Pages Site
+## Product Website
 
-The static product website lives in `docs/` and is ready for GitHub Pages.
-
-To publish it:
-
-1. Push the repository to GitHub.
-2. Open repository settings.
-3. Go to Pages.
-4. Set the source folder to `docs/`.
-5. Upload `WiFind-Setup.exe` or `WiFind.exe` to GitHub Releases.
-
-The download page links to the latest GitHub release when hosted from GitHub Pages.
+The static product website lives in `docs/`. It includes a product landing page and a download page that points to the latest release build.
 
 ## Options
 
