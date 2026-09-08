@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 from scanner import (
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT_SECONDS,
+    UNKNOWN_HOSTNAMES,
     active_interface,
     arp_cache_devices,
     available_interfaces,
@@ -47,6 +48,8 @@ STATIC_ROOT = BUNDLE_ROOT / "static"
 DEFAULT_STATE_ROOT = Path(os.environ.get("LOCALAPPDATA", PROJECT_ROOT)) / "WiFind" if sys.platform == "win32" else PROJECT_ROOT / ".wifind"
 STATE_DIR = Path(os.environ.get("WIFIND_STATE_DIR", str(DEFAULT_STATE_ROOT)))
 HISTORY_PATH = STATE_DIR / "device_history.json"
+SNAPSHOT_PATH = STATE_DIR / "last_scan_snapshot.json"
+CANCELLED_SCANS: set[str] = set()
 
 
 class WiFindHandler(SimpleHTTPRequestHandler):
@@ -78,6 +81,9 @@ class WiFindHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/alias":
             return self.handle_alias()
+
+        if parsed.path == "/api/cancel":
+            return self.handle_cancel()
 
         self.send_json({"error": "Not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -134,11 +140,15 @@ class WiFindHandler(SimpleHTTPRequestHandler):
         local_ip = local_ipv4_for_interface(interface)
         gateway_ip = default_gateway_for_interface(interface)
         history = load_history()
+        previous_snapshot = load_snapshot()
+        previous_keys = set(previous_snapshot.get("keys", []))
         enriched_devices = [
-            enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history)
+            enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history, previous_keys=previous_keys)
             for device in devices
         ]
+        annotate_duplicate_macs(enriched_devices)
         save_seen_devices(enriched_devices)
+        save_snapshot(enriched_devices)
         self.send_json(
             {
                 "ok": True,
@@ -151,7 +161,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 "gatewayIp": gateway_ip,
                 "deviceCount": len(enriched_devices),
                 "devices": enriched_devices,
-                "summary": summarize_devices(enriched_devices),
+                "summary": summarize_devices(enriched_devices, previous_keys),
             }
         )
 
@@ -161,6 +171,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
             params = parse_qs(query)
             interface = resolve_interface(first_query_value(params, "interface"))
             target = first_query_value(params, "target")
+            scan_id = first_query_value(params, "scanId") or utc_now()
             timeout = parse_float(first_query_value(params, "timeout"), DEFAULT_TIMEOUT_SECONDS, 0.5, 10.0)
             retries = parse_int(first_query_value(params, "retries"), DEFAULT_RETRIES, 0, 5)
             resolve_hostnames = parse_bool(first_query_value(params, "resolveHostnames"), True)
@@ -175,7 +186,10 @@ class WiFindHandler(SimpleHTTPRequestHandler):
 
         self.start_event_stream()
         history = load_history()
+        previous_snapshot = load_snapshot()
+        previous_keys = set(previous_snapshot.get("keys", []))
         seen_groups = []
+        progress = {"cache": 0, "live": 0}
 
         self.write_event(
             "start",
@@ -188,42 +202,71 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 "isPrivileged": is_admin(),
                 "localIp": local_ip,
                 "gatewayIp": gateway_ip,
+                "scanId": scan_id,
             },
         )
 
         for network in networks:
+            if scan_id in CANCELLED_SCANS:
+                self.write_event("done", {"ok": False, "cancelled": True})
+                CANCELLED_SCANS.discard(scan_id)
+                return
+
             self.write_event("phase", {"id": "cache", "label": "Reading local neighbor cache"})
             cache_devices = arp_cache_devices(network, local_ip, resolve_hostnames)
             seen_groups.append(cache_devices)
             for device in cache_devices:
+                progress["cache"] += 1
                 self.write_event(
                     "device",
-                    enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history),
+                    enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history, previous_keys=previous_keys),
                 )
+                self.write_event("progress", progress)
+
+            if scan_id in CANCELLED_SCANS:
+                self.write_event("done", {"ok": False, "cancelled": True})
+                CANCELLED_SCANS.discard(scan_id)
+                return
 
             self.write_event("phase", {"id": "arp", "label": f"Broadcasting ARP probes on {network}"})
             live_devices = scan_network(network, interface, timeout, retries, resolve_hostnames)
             seen_groups.append(live_devices)
-            merged = merge_devices(seen_groups)
             for device in live_devices:
-                enriched = enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history)
+                progress["live"] += 1
+                enriched = enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history, previous_keys=previous_keys)
                 self.write_event("device", enriched)
+                self.write_event("progress", progress)
 
         self.write_event("phase", {"id": "enrich", "label": "Merging history and classifying devices"})
         final_devices = [
-            enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history)
+            enrich_device(device, local_ip=local_ip, gateway_ip=gateway_ip, networks=networks, history=history, previous_keys=previous_keys)
             for device in merge_devices(seen_groups)
         ]
+        annotate_duplicate_macs(final_devices)
         save_seen_devices(final_devices)
+        save_snapshot(final_devices)
         self.write_event(
             "done",
             {
                 "ok": True,
                 "deviceCount": len(final_devices),
                 "devices": final_devices,
-                "summary": summarize_devices(final_devices),
+                "summary": summarize_devices(final_devices, previous_keys),
             },
         )
+
+    def handle_cancel(self) -> None:
+        try:
+            payload = self.read_json_body()
+            scan_id = clean_optional(payload.get("scanId"))
+            if not scan_id:
+                raise ValueError("Scan id is required.")
+            CANCELLED_SCANS.add(scan_id)
+        except ValueError as exc:
+            self.send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self.send_json({"ok": True, "scanId": scan_id})
 
     def handle_alias(self) -> None:
         try:
@@ -343,6 +386,35 @@ def save_history(history: dict[str, dict[str, Any]]) -> None:
         json.dump(history, file, indent=2, sort_keys=True)
 
 
+def load_snapshot() -> dict[str, Any]:
+    try:
+        with SNAPSHOT_PATH.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def save_snapshot(devices: list[dict[str, Any]]) -> None:
+    STATE_DIR.mkdir(exist_ok=True)
+    payload = {
+        "createdAt": utc_now(),
+        "keys": sorted(str(device["key"]) for device in devices),
+        "devices": [
+            {
+                "key": device["key"],
+                "ip": device["ip"],
+                "mac": device["mac"],
+                "hostname": device["hostname"],
+                "vendor": device["vendor"],
+            }
+            for device in devices
+        ],
+    }
+    with SNAPSHOT_PATH.open("w", encoding="utf-8") as file:
+        json.dump(payload, file, indent=2, sort_keys=True)
+
+
 def device_key(device: dict[str, Any]) -> str:
     mac = clean_optional(device.get("mac"))
     if mac:
@@ -375,6 +447,7 @@ def enrich_device(
     gateway_ip: str | None,
     networks: list[ipaddress.IPv4Network],
     history: dict[str, dict[str, Any]],
+    previous_keys: set[str] | None = None,
 ) -> dict[str, Any]:
     payload = device.as_dict()
     key = device_key(payload)
@@ -393,6 +466,7 @@ def enrich_device(
     seen_count = int(record.get("seenCount", 0))
 
     notes = []
+    is_new_since_last_scan = bool(previous_keys is not None and key not in previous_keys)
     if is_gateway:
         notes.append("Default gateway candidate")
     if is_local:
@@ -401,6 +475,8 @@ def enrich_device(
         notes.append("Vendor hidden by private MAC")
     if payload["source"] == "arp-cache":
         notes.append("Seen from local neighbor cache")
+    if is_new_since_last_scan:
+        notes.append("New since previous scan")
 
     payload.update(
         {
@@ -410,6 +486,7 @@ def enrich_device(
             "confidence": confidence,
             "confidenceScore": confidence_score,
             "isNew": seen_count == 0,
+            "isNewSinceLastScan": is_new_since_last_scan,
             "firstSeen": first_seen,
             "lastSeen": str(record.get("lastSeen") or now),
             "seenCount": seen_count,
@@ -420,6 +497,24 @@ def enrich_device(
         }
     )
     return payload
+
+
+def annotate_duplicate_macs(devices: list[dict[str, Any]]) -> None:
+    devices_by_mac: dict[str, list[dict[str, Any]]] = {}
+    for device in devices:
+        devices_by_mac.setdefault(str(device.get("mac", "")).upper(), []).append(device)
+
+    for mac, mac_devices in devices_by_mac.items():
+        if len(mac_devices) < 2:
+            continue
+        is_private = is_locally_administered_mac(mac)
+        for device in mac_devices:
+            device["hasDuplicateMac"] = True
+            if is_private:
+                device["hasDuplicatePrivateMac"] = True
+                device.setdefault("notes", []).append("Same private MAC appears on multiple IPs")
+            else:
+                device.setdefault("notes", []).append("Same MAC appears on multiple IPs")
 
 
 def guess_device_type(device: dict[str, str], is_local: bool, is_gateway: bool) -> str:
@@ -448,7 +543,7 @@ def confidence_for(device: dict[str, str], is_local: bool, is_gateway: bool) -> 
         score += 30
     if device.get("vendor") not in {"Unknown", "Private/randomized MAC"}:
         score += 25
-    if device.get("hostname") not in {"Unknown", "Skipped"}:
+    if device.get("hostname") not in UNKNOWN_HOSTNAMES:
         score += 20
     if is_local or is_gateway:
         score += 10
@@ -457,15 +552,20 @@ def confidence_for(device: dict[str, str], is_local: bool, is_gateway: bool) -> 
     return max(0, min(score, 100))
 
 
-def summarize_devices(devices: list[dict[str, Any]]) -> dict[str, int]:
+def summarize_devices(devices: list[dict[str, Any]], previous_keys: set[str] | None = None) -> dict[str, int]:
+    current_keys = {str(device.get("key", "")) for device in devices}
+    previous_keys = previous_keys or set()
     return {
         "total": len(devices),
         "live": sum(1 for device in devices if device.get("source") in {"arp", "arp+cache"}),
         "cached": sum(1 for device in devices if device.get("source") == "arp-cache"),
         "privateMac": sum(1 for device in devices if device.get("isPrivateMac")),
-        "unknownHostnames": sum(1 for device in devices if device.get("hostname") in {"Unknown", "Skipped"}),
+        "unknownHostnames": sum(1 for device in devices if device.get("hostname") in UNKNOWN_HOSTNAMES),
         "gateways": sum(1 for device in devices if device.get("isGateway")),
         "newDevices": sum(1 for device in devices if device.get("isNew")),
+        "newSinceLastScan": sum(1 for device in devices if device.get("isNewSinceLastScan")),
+        "missingSinceLastScan": len(previous_keys - current_keys),
+        "previousTotal": len(previous_keys),
     }
 
 

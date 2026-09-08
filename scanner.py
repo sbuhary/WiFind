@@ -35,6 +35,7 @@ else:
 
 DEFAULT_TIMEOUT_SECONDS = 2.0
 DEFAULT_RETRIES = 1
+UNKNOWN_HOSTNAMES = {"", "Unknown", "Unknown Device", "Skipped"}
 
 
 @dataclass(frozen=True)
@@ -438,12 +439,71 @@ def hostname_for_ip(ip_address: str) -> str:
     except (socket.herror, socket.gaierror, TimeoutError, OSError):
         hostname = ""
 
-    clean_hostname = hostname.rstrip(".")
-    if clean_hostname and clean_hostname != ip_address:
+    clean_hostname = normalize_hostname(hostname, ip_address)
+    if clean_hostname:
         return clean_hostname
 
+    command_hostname = command_hostname_for_ip(ip_address)
+    if command_hostname:
+        return command_hostname
+
     netbios_name = netbios_hostname_for_ip(ip_address)
-    return netbios_name or "Unknown"
+    return netbios_name or "Unknown Device"
+
+
+def normalize_hostname(hostname: str, ip_address: str) -> str | None:
+    cleaned = hostname.strip().rstrip(".")
+    if not cleaned or cleaned == ip_address:
+        return None
+    return cleaned
+
+
+def command_hostname_for_ip(ip_address: str) -> str | None:
+    return nslookup_hostname_for_ip(ip_address) or ping_hostname_for_ip(ip_address)
+
+
+def nslookup_hostname_for_ip(ip_address: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["nslookup", ip_address],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    for line in result.stdout.splitlines():
+        match = re.match(r"\s*Name:\s+(.+?)\s*$", line, flags=re.IGNORECASE)
+        if match:
+            return normalize_hostname(match.group(1), ip_address)
+    return None
+
+
+def ping_hostname_for_ip(ip_address: str) -> str | None:
+    if os.name != "nt":
+        return None
+
+    try:
+        result = subprocess.run(
+            ["ping", "-a", "-n", "1", "-w", "500", ip_address],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    for line in result.stdout.splitlines():
+        match = re.match(r"\s*Pinging\s+([^\s\[]+)\s+\[" + re.escape(ip_address) + r"\]", line, flags=re.IGNORECASE)
+        if match:
+            return normalize_hostname(match.group(1), ip_address)
+    return None
 
 
 def netbios_hostname_for_ip(ip_address: str) -> str | None:
@@ -599,7 +659,7 @@ def merge_devices(device_groups: Iterable[Iterable[Device]]) -> list[Device]:
 
             preferred = device if source_rank.get(device.source, 9) < source_rank.get(existing.source, 9) else existing
             hostname = preferred.hostname
-            if hostname in ("Unknown", "Skipped") and device.hostname not in ("Unknown", "Skipped"):
+            if hostname in UNKNOWN_HOSTNAMES and device.hostname not in UNKNOWN_HOSTNAMES:
                 hostname = device.hostname
 
             vendor = preferred.vendor
