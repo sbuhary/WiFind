@@ -31,6 +31,7 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!packaging/windows/WiFind.spec
 
 # Installer logs
 pip-log.txt
@@ -202,6 +203,9 @@ cython_debug/
 # .vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
+
+# WiFind local runtime state
+.wifind/
 
 # Ruff stuff:
 .ruff_cache/
