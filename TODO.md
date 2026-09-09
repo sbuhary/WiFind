@@ -22,3 +22,5 @@
 - [x] Add optional browser notifications for newly discovered devices.
 - [x] Add additional hostname fallbacks beyond reverse DNS.
 - [x] Add GitHub Actions release artifact builds.
+- [x] Add lightweight checks for common device service ports.
+- [x] Add local network timeline logging with offline and new-device events.

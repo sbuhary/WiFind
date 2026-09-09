@@ -14,6 +14,8 @@ ARP scanning only works on your local broadcast network. Use this tool only on n
 - Labels locally administered MAC addresses as private/randomized when a real vendor cannot be inferred.
 - Optionally performs reverse DNS and Windows NetBIOS lookups for hostnames.
 - Streams scan progress to the UI and appends devices as they are discovered.
+- Checks discovered devices for common management/web ports: `22`, `80`, `443`, and `8080`.
+- Logs each completed scan to `network_history.json`, including offline devices from the previous scan and `NEW DEVICE WARNING` entries for newly-seen MAC addresses.
 - Persists local device history and user aliases under `%LOCALAPPDATA%\WiFind` on Windows or `.wifind/` during local development.
 - Adds confidence, device type guesses, source labels, and network health metrics.
 - Provides card and table inventory views with filters, sorting, and CSV export.
@@ -125,6 +127,12 @@ Interface names vary by operating system. If auto-detection fails, check your OS
 python scanner.py --no-hostnames
 ```
 
+### Faster scan without service checks
+
+```bash
+python scanner.py --no-port-scan
+```
+
 ## Releases
 
 Put downloadable executables in **GitHub Releases**, not in the repository. `dist/` stays ignored so large build artifacts and machine-specific output do not pollute source control.
@@ -184,6 +192,7 @@ The static product website lives in `docs/`. It includes a product landing page 
 
 - `Smart Scan`: Runs adapter detection, local ARP-cache import, live ARP probing, hostname enrichment, and device classification.
 - Summary metrics: Shows total devices, live ARP devices, cached-only devices, private MACs, unknown hostnames, and gateway candidates.
+- Open services: Counts open results from the lightweight checks for ports `22`, `80`, `443`, and `8080`.
 - Phase timeline: Shows the current scan stage while results stream in.
 - Progress facts: Shows elapsed scan time and cache/live device counters.
 - Cancel: Stops the current dashboard scan session.
@@ -191,8 +200,10 @@ The static product website lives in `docs/`. It includes a product landing page 
 - Device details: Click a card or table row to inspect the full identity/debug record.
 - Table view: Dense inventory view for sorting and exporting.
 - Filter chips: Quickly narrow results to live, cached, unknown, private MAC, gateway, this device, or new devices.
+- Services filter: Shows only devices with at least one open checked port.
 - Aliases: Type a label into a device card and it is saved locally for future scans.
 - History: WiFind stores first seen, last seen, seen count, aliases, and last known identity data locally.
+- Timeline logging: WiFind writes completed scan events to `network_history.json`, including `Online`, `Offline`, and `NEW DEVICE WARNING` status data.
 - Previous scan comparison: Highlights new devices and counts devices missing since the last completed scan.
 - Auto rescan: Optionally reruns Smart Scan on a fixed local interval.
 - Notifications: Optional browser notifications can alert when a device appears that was not in the previous scan.
@@ -211,13 +222,14 @@ The static product website lives in `docs/`. It includes a product landing page 
 - `Sort`: Sorts devices by IP, confidence, type, vendor, or last seen.
 - `Cards/Table`: Switches between inventory card view and dense table view.
 - `Export CSV`: Downloads the current scan result as a CSV file.
+- `Open ports`: Shows which checked ports responded on the device. `None` means no response from `22`, `80`, `443`, or `8080`.
 - `Privileges`: Shows whether the backend server appears to be running elevated. On Windows it should say `Elevated` when PowerShell was opened as Administrator.
 - `Source`: Shows whether the device came from a live ARP reply, the OS ARP cache, or both.
 
 CLI options:
 
 ```text
-usage: scanner.py [-h] [-i INTERFACE] [-t TIMEOUT] [-r RETRIES] [--no-hostnames] [--no-cache] [target]
+usage: scanner.py [-h] [-i INTERFACE] [-t TIMEOUT] [-r RETRIES] [--no-hostnames] [--no-cache] [--no-port-scan] [target]
 ```
 
 - `target`: Optional CIDR range to scan, for example `192.168.1.0/24`.
@@ -226,6 +238,7 @@ usage: scanner.py [-h] [-i INTERFACE] [-t TIMEOUT] [-r RETRIES] [--no-hostnames]
 - `-r, --retries`: Number of ARP retry attempts. Default: `1`.
 - `--no-hostnames`: Skip reverse DNS lookups for faster scans.
 - `--no-cache`: Do not merge devices from the operating system ARP cache.
+- `--no-port-scan`: Skip lightweight TCP checks for common management/web ports.
 
 Web UI options:
 
