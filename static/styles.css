@@ -206,7 +206,7 @@ h2 {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
   gap: 12px;
   margin-top: 16px;
 }
@@ -234,6 +234,7 @@ h2 {
 .metric-card.gateway strong { color: var(--primary-2); }
 .metric-card.new-scan strong { color: var(--blue); }
 .metric-card.missing strong { color: var(--amber); }
+.metric-card.services strong { color: var(--primary); }
 
 .workspace {
   display: grid;

@@ -36,6 +36,13 @@ else:
 
 DEFAULT_TIMEOUT_SECONDS = 2.0
 DEFAULT_RETRIES = 1
+COMMON_SERVICE_PORTS = (22, 80, 443, 8080)
+PORT_NAMES = {
+    22: "SSH",
+    80: "HTTP",
+    443: "HTTPS",
+    8080: "HTTP-alt",
+}
 UNKNOWN_HOSTNAMES = {"", "Unknown", "Unknown Device", "Skipped"}
 LOCAL_OUI_OVERRIDES = {
     "001A11": "Google",
@@ -56,14 +63,17 @@ class Device:
     hostname: str
     vendor: str
     source: str = "arp"
+    open_ports: tuple[int, ...] = ()
 
-    def as_dict(self) -> dict[str, str]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "ip": self.ip,
             "mac": self.mac,
             "hostname": self.hostname,
             "vendor": self.vendor,
             "source": self.source,
+            "openPorts": list(self.open_ports),
+            "services": [service_for_port(port) for port in self.open_ports],
         }
 
 
@@ -156,6 +166,11 @@ def parse_args() -> argparse.Namespace:
         "--no-cache",
         action="store_true",
         help="Do not merge devices from the operating system ARP cache.",
+    )
+    parser.add_argument(
+        "--no-port-scan",
+        action="store_true",
+        help="Skip lightweight TCP checks for common management ports.",
     )
     return parser.parse_args()
 
@@ -448,6 +463,27 @@ def vendor_for_mac(mac: str) -> str:
     return "Unknown"
 
 
+def service_for_port(port: int) -> str:
+    return PORT_NAMES.get(port, f"TCP/{port}")
+
+
+def scan_open_ports(
+    ip_address: str,
+    ports: Iterable[int] = COMMON_SERVICE_PORTS,
+    timeout: float = 0.25,
+) -> tuple[int, ...]:
+    open_ports: list[int] = []
+    for port in ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.settimeout(timeout)
+                if probe.connect_ex((ip_address, int(port))) == 0:
+                    open_ports.append(int(port))
+        except OSError:
+            continue
+    return tuple(open_ports)
+
+
 def hostname_for_ip(ip_address: str) -> str:
     for resolver in (
         netbios_udp_hostname_for_ip,
@@ -702,6 +738,7 @@ def scan_network(
     timeout: float,
     retries: int,
     resolve_hostnames: bool,
+    scan_ports: bool = True,
 ) -> list[Device]:
     ensure_scapy_available()
     capture_interface = scapy_interface(interface)
@@ -732,6 +769,7 @@ def scan_network(
             hostname=hostname_for_ip(ip_address) if resolve_hostnames else "Skipped",
             vendor=vendor_for_mac(mac_address),
             source="arp",
+            open_ports=scan_open_ports(ip_address) if scan_ports else (),
         )
 
     return sorted(devices_by_ip.values(), key=lambda device: ipaddress.IPv4Address(device.ip))
@@ -744,11 +782,12 @@ def scan_network_sources(
     retries: int,
     resolve_hostnames: bool,
     include_cache: bool = True,
+    scan_ports: bool = True,
 ) -> list[Device]:
     local_ip = local_ipv4_for_interface(interface)
-    groups = [scan_network(network, interface, timeout, retries, resolve_hostnames)]
+    groups = [scan_network(network, interface, timeout, retries, resolve_hostnames, scan_ports)]
     if include_cache:
-        groups.append(arp_cache_devices(network, local_ip, resolve_hostnames))
+        groups.append(arp_cache_devices(network, local_ip, resolve_hostnames, scan_ports))
     return merge_devices(groups)
 
 
@@ -756,6 +795,7 @@ def arp_cache_devices(
     network: ipaddress.IPv4Network,
     interface_ip: str | None,
     resolve_hostnames: bool,
+    scan_ports: bool = True,
 ) -> list[Device]:
     if os.name != "nt":
         return []
@@ -803,6 +843,7 @@ def arp_cache_devices(
                 hostname=hostname_for_ip(ip_address) if resolve_hostnames else "Skipped",
                 vendor=vendor_for_mac(mac_address),
                 source="arp-cache",
+                open_ports=scan_open_ports(ip_address) if scan_ports else (),
             )
         )
 
@@ -836,6 +877,7 @@ def merge_devices(device_groups: Iterable[Iterable[Device]]) -> list[Device]:
                 hostname=hostname,
                 vendor=vendor,
                 source=source,
+                open_ports=tuple(sorted(set(existing.open_ports) | set(device.open_ports))),
             )
 
     return sorted(devices_by_ip.values(), key=lambda device: ipaddress.IPv4Address(device.ip))
@@ -848,6 +890,7 @@ def smart_scan(
     retries: int,
     resolve_hostnames: bool,
     include_cache: bool = True,
+    scan_ports: bool = True,
 ) -> tuple[list[Device], list[ipaddress.IPv4Network]]:
     networks = discovery_networks(interface, target)
     local_ip = local_ipv4_for_interface(interface)
@@ -861,17 +904,28 @@ def smart_scan(
                 timeout=timeout,
                 retries=retries,
                 resolve_hostnames=resolve_hostnames,
+                scan_ports=scan_ports,
             )
         )
         if include_cache:
-            groups.append(arp_cache_devices(network, local_ip, resolve_hostnames))
+            groups.append(arp_cache_devices(network, local_ip, resolve_hostnames, scan_ports))
 
     return merge_devices(groups), networks
 
 
 def print_table(devices: Iterable[Device]) -> None:
-    rows = [(device.ip, device.mac, device.vendor, device.hostname, device.source) for device in devices]
-    headers = ("IP Address", "MAC Address", "Vendor", "Device Name / Hostname", "Source")
+    rows = [
+        (
+            device.ip,
+            device.mac,
+            device.vendor,
+            device.hostname,
+            ", ".join(str(port) for port in device.open_ports) or "None",
+            device.source,
+        )
+        for device in devices
+    ]
+    headers = ("IP Address", "MAC Address", "Vendor", "Device Name / Hostname", "Open Ports", "Source")
     widths = [len(header) for header in headers]
 
     for row in rows:
@@ -907,6 +961,7 @@ def main() -> int:
             retries=args.retries,
             resolve_hostnames=not args.no_hostnames,
             include_cache=not args.no_cache,
+            scan_ports=not args.no_port_scan,
         )
         network_label = ", ".join(str(network) for network in networks)
         print(f"Scanned {network_label} on interface {display_name_for_interface(interface)}.")

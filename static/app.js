@@ -40,6 +40,7 @@ const metrics = {
   gateways: document.querySelector("#metric-gateways"),
   newSinceLastScan: document.querySelector("#metric-new-scan"),
   missingSinceLastScan: document.querySelector("#metric-missing"),
+  openServices: document.querySelector("#metric-services"),
 };
 
 let devices = [];
@@ -135,6 +136,16 @@ function deviceInitial(device) {
   return "IP";
 }
 
+function openPortsLabel(device) {
+  const ports = Array.isArray(device.openPorts) ? device.openPorts : [];
+  return ports.length ? ports.join(", ") : "None";
+}
+
+function servicesLabel(device) {
+  const services = Array.isArray(device.services) ? device.services : [];
+  return services.length ? services.join(", ") : "None";
+}
+
 function badgeClass(value) {
   if (value === "High") return "ok";
   if (value === "Medium") return "cache";
@@ -163,6 +174,7 @@ function passesChip(device) {
   if (currentFilter === "gateway") return Boolean(device.isGateway);
   if (currentFilter === "local") return Boolean(device.isLocal);
   if (currentFilter === "new") return Boolean(device.isNew || device.isNewSinceLastScan);
+  if (currentFilter === "services") return Boolean((device.openPorts || []).length);
   return true;
 }
 
@@ -178,6 +190,8 @@ function filteredDevices() {
       device.deviceType,
       device.confidence,
       device.source,
+      openPortsLabel(device),
+      servicesLabel(device),
     ].join(" ").toLowerCase();
     return passesChip(device) && (!query || haystack.includes(query));
   });
@@ -205,6 +219,7 @@ function updateMetrics(summary = lastSummary) {
     gateways: devices.filter((device) => device.isGateway).length,
     newSinceLastScan: devices.filter((device) => device.isNewSinceLastScan).length,
     missingSinceLastScan: 0,
+    openServices: devices.reduce((total, device) => total + ((device.openPorts || []).length || 0), 0),
   };
 
   metrics.total.textContent = computed.total ?? 0;
@@ -215,6 +230,7 @@ function updateMetrics(summary = lastSummary) {
   metrics.gateways.textContent = computed.gateways ?? 0;
   metrics.newSinceLastScan.textContent = computed.newSinceLastScan ?? 0;
   metrics.missingSinceLastScan.textContent = computed.missingSinceLastScan ?? 0;
+  metrics.openServices.textContent = computed.openServices ?? 0;
 }
 
 function render() {
@@ -246,12 +262,14 @@ function renderCards(visible) {
         <div><span>Vendor</span><strong>${escapeText(device.vendor)}</strong></div>
         <div><span>Type</span><strong>${escapeText(device.deviceType)}</strong></div>
         <div><span>Source</span><strong>${escapeText(device.source)}</strong></div>
+        <div><span>Open ports</span><strong>${escapeText(openPortsLabel(device))}</strong></div>
         <div><span>Seen</span><strong>${escapeText(device.seenCount || 0)} times</strong></div>
       </div>
       <div class="notes">
         ${(device.notes || []).map((note) => `<span class="badge neutral">${escapeText(note)}</span>`).join("")}
         ${device.isNew ? `<span class="badge cache">First seen</span>` : ""}
         ${device.isNewSinceLastScan ? `<span class="badge ok">New since last scan</span>` : ""}
+        ${device.timelineWarning ? `<span class="badge danger">${escapeText(device.timelineWarning)}</span>` : ""}
         ${device.hasDuplicatePrivateMac ? `<span class="badge warning">Duplicate private MAC</span>` : ""}
       </div>
     </article>
@@ -263,7 +281,7 @@ function renderCards(visible) {
 
 function renderTable(visible) {
   if (visible.length === 0) {
-    tableBody.innerHTML = `<tr class="empty-row"><td colspan="8">${devices.length ? "No devices match the current filters." : "Start a scan to populate this table."}</td></tr>`;
+    tableBody.innerHTML = `<tr class="empty-row"><td colspan="9">${devices.length ? "No devices match the current filters." : "Start a scan to populate this table."}</td></tr>`;
     return;
   }
 
@@ -278,6 +296,7 @@ function renderTable(visible) {
       <td><span class="badge ${badgeClass(device.vendor)}">${escapeText(device.vendor)}</span></td>
       <td>${escapeText(device.deviceType)}</td>
       <td><span class="badge ${badgeClass(device.confidence)}">${escapeText(device.confidence)} ${escapeText(device.confidenceScore)}%</span></td>
+      <td class="mono">${escapeText(openPortsLabel(device))}</td>
       <td><span class="badge neutral">${escapeText(device.source)}</span></td>
       <td>${escapeText(device.seenCount || 0)}</td>
     </tr>
@@ -392,7 +411,10 @@ function runScan() {
       lastSummary = data.summary || null;
       render();
       setPhase("done");
-      setStatus(`Scan complete. Found ${data.deviceCount} device${data.deviceCount === 1 ? "" : "s"}.`);
+      const warnings = data.timelineSummary?.newDeviceWarnings || 0;
+      const offline = data.timelineSummary?.offline || 0;
+      const timelineText = warnings || offline ? ` ${warnings} new warning${warnings === 1 ? "" : "s"}, ${offline} offline.` : "";
+      setStatus(`Scan complete. Found ${data.deviceCount} device${data.deviceCount === 1 ? "" : "s"}.${timelineText}`);
     }
     setScanningState(false);
     scheduleAutoRescan();
@@ -475,7 +497,11 @@ function openDetails(key) {
     ["Vendor", device.vendor],
     ["Type", device.deviceType],
     ["Confidence", `${device.confidence} ${device.confidenceScore}%`],
+    ["Open ports", openPortsLabel(device)],
+    ["Services", servicesLabel(device)],
     ["Source", device.source],
+    ["Timeline status", device.timelineStatus],
+    ["Timeline warning", device.timelineWarning],
     ["First seen", device.firstSeen],
     ["Last seen", device.lastSeen],
     ["Seen count", device.seenCount],
@@ -500,7 +526,7 @@ function closeDetails() {
 function exportCsv() {
   if (devices.length === 0) return;
 
-  const headers = ["Alias", "Device Name / Hostname", "IP", "MAC", "Vendor", "Type", "Confidence", "Source", "New Since Last Scan", "First Seen", "Last Seen", "Seen Count"];
+  const headers = ["Alias", "Device Name / Hostname", "IP", "MAC", "Vendor", "Type", "Confidence", "Open Ports", "Services", "Source", "New Since Last Scan", "Timeline Warning", "First Seen", "Last Seen", "Seen Count"];
   const rows = devices.map((device) => [
     device.alias,
     device.hostname,
@@ -509,8 +535,11 @@ function exportCsv() {
     device.vendor,
     device.deviceType,
     `${device.confidence} ${device.confidenceScore}%`,
+    openPortsLabel(device),
+    servicesLabel(device),
     device.source,
     device.isNewSinceLastScan ? "Yes" : "No",
+    device.timelineWarning || "",
     device.firstSeen,
     device.lastSeen,
     device.seenCount,

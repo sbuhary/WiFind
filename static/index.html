@@ -74,6 +74,10 @@
           <span>Missing Since Last</span>
           <strong id="metric-missing">0</strong>
         </article>
+        <article class="metric-card services">
+          <span>Open Services</span>
+          <strong id="metric-services">0</strong>
+        </article>
       </section>
 
       <section class="workspace">
@@ -201,6 +205,7 @@
             <button class="chip" data-filter="gateway" type="button">Gateway</button>
             <button class="chip" data-filter="local" type="button">This device</button>
             <button class="chip" data-filter="new" type="button">New</button>
+            <button class="chip" data-filter="services" type="button">Services</button>
           </div>
 
           <div id="cards-container" class="device-grid">
@@ -217,13 +222,14 @@
                   <th scope="col">Vendor</th>
                   <th scope="col">Type</th>
                   <th scope="col">Confidence</th>
+                  <th scope="col">Ports</th>
                   <th scope="col">Source</th>
                   <th scope="col">Seen</th>
                 </tr>
               </thead>
               <tbody id="results-body">
                 <tr class="empty-row">
-                  <td colspan="8">Start a scan to populate this table.</td>
+                  <td colspan="9">Start a scan to populate this table.</td>
                 </tr>
               </tbody>
             </table>
