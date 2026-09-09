@@ -49,6 +49,8 @@ DEFAULT_STATE_ROOT = Path(os.environ.get("LOCALAPPDATA", PROJECT_ROOT)) / "WiFin
 STATE_DIR = Path(os.environ.get("WIFIND_STATE_DIR", str(DEFAULT_STATE_ROOT)))
 HISTORY_PATH = STATE_DIR / "device_history.json"
 SNAPSHOT_PATH = STATE_DIR / "last_scan_snapshot.json"
+NETWORK_HISTORY_PATH = STATE_DIR / "network_history.json"
+MAX_NETWORK_HISTORY_ENTRIES = 250
 CANCELLED_SCANS: set[str] = set()
 
 
@@ -129,6 +131,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 retries=retries,
                 resolve_hostnames=resolve_hostnames,
                 include_cache=True,
+                scan_ports=True,
             )
         except RuntimeError as exc:
             self.send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -147,6 +150,12 @@ class WiFindHandler(SimpleHTTPRequestHandler):
             for device in devices
         ]
         annotate_duplicate_macs(enriched_devices)
+        timeline_summary = append_network_history(
+            enriched_devices,
+            previous_snapshot=previous_snapshot,
+            targets=[str(network) for network in networks],
+            interface_label=display_name_for_interface(interface),
+        )
         save_seen_devices(enriched_devices)
         save_snapshot(enriched_devices)
         self.send_json(
@@ -162,6 +171,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 "deviceCount": len(enriched_devices),
                 "devices": enriched_devices,
                 "summary": summarize_devices(enriched_devices, previous_keys),
+                "timelineSummary": timeline_summary,
             }
         )
 
@@ -213,7 +223,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 return
 
             self.write_event("phase", {"id": "cache", "label": "Reading local neighbor cache"})
-            cache_devices = arp_cache_devices(network, local_ip, resolve_hostnames)
+            cache_devices = arp_cache_devices(network, local_ip, resolve_hostnames, scan_ports=True)
             seen_groups.append(cache_devices)
             for device in cache_devices:
                 progress["cache"] += 1
@@ -229,7 +239,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 return
 
             self.write_event("phase", {"id": "arp", "label": f"Broadcasting ARP probes on {network}"})
-            live_devices = scan_network(network, interface, timeout, retries, resolve_hostnames)
+            live_devices = scan_network(network, interface, timeout, retries, resolve_hostnames, scan_ports=True)
             seen_groups.append(live_devices)
             for device in live_devices:
                 progress["live"] += 1
@@ -243,6 +253,12 @@ class WiFindHandler(SimpleHTTPRequestHandler):
             for device in merge_devices(seen_groups)
         ]
         annotate_duplicate_macs(final_devices)
+        timeline_summary = append_network_history(
+            final_devices,
+            previous_snapshot=previous_snapshot,
+            targets=[str(network) for network in networks],
+            interface_label=display_name_for_interface(interface),
+        )
         save_seen_devices(final_devices)
         save_snapshot(final_devices)
         self.write_event(
@@ -252,6 +268,7 @@ class WiFindHandler(SimpleHTTPRequestHandler):
                 "deviceCount": len(final_devices),
                 "devices": final_devices,
                 "summary": summarize_devices(final_devices, previous_keys),
+                "timelineSummary": timeline_summary,
             },
         )
 
@@ -381,7 +398,7 @@ def load_history() -> dict[str, dict[str, Any]]:
 
 
 def save_history(history: dict[str, dict[str, Any]]) -> None:
-    STATE_DIR.mkdir(exist_ok=True)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
     with HISTORY_PATH.open("w", encoding="utf-8") as file:
         json.dump(history, file, indent=2, sort_keys=True)
 
@@ -396,7 +413,7 @@ def load_snapshot() -> dict[str, Any]:
 
 
 def save_snapshot(devices: list[dict[str, Any]]) -> None:
-    STATE_DIR.mkdir(exist_ok=True)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "createdAt": utc_now(),
         "keys": sorted(str(device["key"]) for device in devices),
@@ -407,12 +424,121 @@ def save_snapshot(devices: list[dict[str, Any]]) -> None:
                 "mac": device["mac"],
                 "hostname": device["hostname"],
                 "vendor": device["vendor"],
+                "openPorts": device.get("openPorts", []),
+                "services": device.get("services", []),
+                "source": device.get("source", ""),
             }
             for device in devices
         ],
     }
     with SNAPSHOT_PATH.open("w", encoding="utf-8") as file:
         json.dump(payload, file, indent=2, sort_keys=True)
+
+
+def load_network_history() -> list[dict[str, Any]]:
+    try:
+        with NETWORK_HISTORY_PATH.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+def save_network_history(entries: list[dict[str, Any]]) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with NETWORK_HISTORY_PATH.open("w", encoding="utf-8") as file:
+        json.dump(entries[-MAX_NETWORK_HISTORY_ENTRIES:], file, indent=2, sort_keys=True)
+
+
+def append_network_history(
+    devices: list[dict[str, Any]],
+    previous_snapshot: dict[str, Any],
+    targets: list[str],
+    interface_label: str,
+) -> dict[str, int]:
+    timestamp = utc_now()
+    previous_devices = previous_snapshot.get("devices", [])
+    if not isinstance(previous_devices, list):
+        previous_devices = []
+
+    current_keys = {str(device.get("key", "")) for device in devices}
+    previous_by_key = {str(device.get("key", "")): device for device in previous_devices if device.get("key")}
+    previous_macs = {
+        str(device.get("mac", "")).upper()
+        for device in previous_devices
+        if clean_optional(device.get("mac"))
+    }
+    has_baseline = bool(previous_macs)
+
+    events: list[dict[str, Any]] = []
+    new_device_count = 0
+    open_service_count = 0
+
+    for device in devices:
+        open_ports = list(device.get("openPorts") or [])
+        open_service_count += len(open_ports)
+        warning = ""
+        if has_baseline and str(device.get("mac", "")).upper() not in previous_macs:
+            warning = "NEW DEVICE WARNING"
+            new_device_count += 1
+            device["timelineWarning"] = warning
+
+        device["timelineStatus"] = "Online"
+        events.append(
+            {
+                "timestamp": timestamp,
+                "status": "Online",
+                "warning": warning,
+                "key": device.get("key"),
+                "ip": device.get("ip"),
+                "mac": device.get("mac"),
+                "hostname": device.get("hostname"),
+                "vendor": device.get("vendor"),
+                "source": device.get("source"),
+                "openPorts": open_ports,
+                "services": list(device.get("services") or []),
+            }
+        )
+
+    offline_count = 0
+    for key, previous_device in previous_by_key.items():
+        if key in current_keys:
+            continue
+        offline_count += 1
+        events.append(
+            {
+                "timestamp": timestamp,
+                "status": "Offline",
+                "warning": "",
+                "key": key,
+                "ip": previous_device.get("ip"),
+                "mac": previous_device.get("mac"),
+                "hostname": previous_device.get("hostname"),
+                "vendor": previous_device.get("vendor"),
+                "source": previous_device.get("source"),
+                "openPorts": list(previous_device.get("openPorts") or []),
+                "services": list(previous_device.get("services") or []),
+            }
+        )
+
+    summary = {
+        "online": len(devices),
+        "offline": offline_count,
+        "newDeviceWarnings": new_device_count,
+        "openServices": open_service_count,
+    }
+    entries = load_network_history()
+    entries.append(
+        {
+            "timestamp": timestamp,
+            "targets": targets,
+            "interface": interface_label,
+            "summary": summary,
+            "events": events,
+        }
+    )
+    save_network_history(entries)
+    return summary
 
 
 def device_key(device: dict[str, Any]) -> str:
@@ -477,6 +603,11 @@ def enrich_device(
         notes.append("Seen from local neighbor cache")
     if is_new_since_last_scan:
         notes.append("New since previous scan")
+    open_ports = list(payload.get("openPorts") or [])
+    if any(port in open_ports for port in (80, 443, 8080)):
+        notes.append("Web or management service detected")
+    if 22 in open_ports:
+        notes.append("SSH service detected")
 
     payload.update(
         {
@@ -566,6 +697,8 @@ def summarize_devices(devices: list[dict[str, Any]], previous_keys: set[str] | N
         "newSinceLastScan": sum(1 for device in devices if device.get("isNewSinceLastScan")),
         "missingSinceLastScan": len(previous_keys - current_keys),
         "previousTotal": len(previous_keys),
+        "openServices": sum(len(device.get("openPorts") or []) for device in devices),
+        "newDeviceWarnings": sum(1 for device in devices if device.get("timelineWarning") == "NEW DEVICE WARNING"),
     }
 
 
